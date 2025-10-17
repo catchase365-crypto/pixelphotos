@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>像素化生成器</title>
+    <style>
+        :root {
+            --background-color: #121212;
+            --pixel-off-color: #2a2a2a;
+            --control-label-color: #aaa;
+            --container-bg-color: rgba(0, 0, 0, 0.2);
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: var(--background-color);
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
+            text-align: center;
+            padding: 1.5rem;
+            box-sizing: border-box;
+        }
+
+        .controls-container {
+            margin-bottom: 2rem;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        .controls-container h1 {
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            font-weight: 300;
+            letter-spacing: 2px;
+            margin: 0;
+        }
+
+        .controls-container p {
+            font-size: clamp(0.8rem, 2vw, 1rem);
+            color: #888;
+            margin-top: 0.5rem;
+        }
+
+        .control-section {
+            margin-top: 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .control-label {
+            font-size: 0.9rem;
+            color: var(--control-label-color);
+            margin-right: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        #randomizeBtn {
+            background-image: linear-gradient(45deg, #8a2be2, #4169e1);
+        }
+        
+        #uploadBtn {
+            background-image: linear-gradient(45deg, #43e97b, #38f9d7);
+        }
+
+        .shape-btn, .density-btn {
+            background: #333;
+        }
+
+        .shape-btn.active, .density-btn.active {
+            background-image: linear-gradient(45deg, #ff9a9e, #fad0c4);
+            color: #333;
+            font-weight: bold;
+            box-shadow: 0 6px 20px rgba(255, 154, 158, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .save-btn {
+            background-image: linear-gradient(45deg, #FF6B6B, #F8B400);
+        }
+
+        .light-grid {
+            display: grid;
+            /* grid-template-columns and rows are set by JS */
+            gap: 2px;
+            padding: 10px;
+            background-color: var(--container-bg-color);
+            border-radius: 15px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease-in-out;
+            max-width: 90vw;
+            max-height: 60vh;
+        }
+
+        .pixel {
+            width: 8px; /* Base size */
+            height: 8px; /* Base size */
+            background-color: var(--pixel-off-color);
+            border-radius: 2px;
+            transition: background-color 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls-container">
+        <h1>像素化生成器</h1>
+        <p>选择形状和分辨率，上传图片或随机生成像素画</p>
+        
+        <div class="control-section">
+            <button id="randomizeBtn" class="btn">随机配色</button>
+            <button id="uploadBtn" class="btn">上传图片</button>
+        </div>
+
+        <div class="control-section" id="shape-controls">
+            <p class="control-label">形状:</p>
+            <button class="btn shape-btn active" data-ratio="1:1">1:1 正方形</button>
+            <button class="btn shape-btn" data-ratio="9:19.5">9:19.5 竖屏</button>
+            <button class="btn shape-btn" data-ratio="16:9">16:9 宽屏</button>
+            <button class="btn shape-btn" data-ratio="16:10">16:10 宽屏</button>
+        </div>
+
+        <div class="control-section" id="density-controls">
+             <p class="control-label">分辨率:</p>
+             <button class="btn density-btn" data-density="25">低</button>
+             <button class="btn density-btn active" data-density="50">中</button>
+             <button class="btn density-btn" data-density="75">高</button>
+             <button class="btn density-btn" data-density="100">极高</button>
+        </div>
+
+        <div class="control-section">
+            <button id="savePngWithBgBtn" class="btn save-btn">保存PNG (含背景)</button>
+            <button id="savePngNoBgBtn" class="btn save-btn">保存PNG (无背景)</button>
+        </div>
+    </div>
+    
+    <input type="file" id="imageUploader" accept="image/*" style="display: none;">
+    <div class="light-grid"></div>
+
+    <script>
+        const gridContainer = document.querySelector('.light-grid');
+        const randomizeBtn = document.getElementById('randomizeBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const imageUploader = document.getElementById('imageUploader');
+        const shapeControls = document.getElementById('shape-controls');
+        const densityControls = document.getElementById('density-controls');
+        const savePngWithBgBtn = document.getElementById('savePngWithBgBtn');
+        const savePngNoBgBtn = document.getElementById('savePngNoBgBtn');
+
+        let GRID_WIDTH = 50;
+        let GRID_HEIGHT = 50;
+        let PIXEL_COUNT = GRID_WIDTH * GRID_HEIGHT;
+        let DIAGONAL_COUNT = GRID_WIDTH + GRID_HEIGHT - 1;
+        
+        let currentRatio = '1:1';
+        let currentDensity = 50; // Pixels on the longest side
+
+        let pixels = [];
+        let pixelBaseColors = [];
+        
+        function setupGrid() {
+            const [ratioW, ratioH] = currentRatio.split(':').map(Number);
+
+            if (ratioW >= ratioH) { // Landscape or square
+                GRID_WIDTH = currentDensity;
+                GRID_HEIGHT = Math.round(currentDensity * ratioH / ratioW);
+            } else { // Portrait
+                GRID_HEIGHT = currentDensity;
+                GRID_WIDTH = Math.round(currentDensity * ratioW / ratioH);
+            }
+            
+            GRID_WIDTH = Math.max(1, GRID_WIDTH);
+            GRID_HEIGHT = Math.max(1, GRID_HEIGHT);
+
+            rebuildGrid(GRID_WIDTH, GRID_HEIGHT);
+            generateDiagonalColors();
+        }
+
+        function rebuildGrid(width, height) {
+            PIXEL_COUNT = width * height;
+            DIAGONAL_COUNT = width + height - 1;
+
+            const pixelSize = Math.min(12, 600 / Math.max(width, height));
+            const pixelRadius = Math.max(1, pixelSize * 0.2);
+            
+            gridContainer.style.gridTemplateColumns = `repeat(${width}, ${pixelSize}px)`;
+            gridContainer.style.gridTemplateRows = `repeat(${height}, ${pixelSize}px)`;
+            
+            gridContainer.innerHTML = '';
+            pixels = [];
+            pixelBaseColors = new Array(PIXEL_COUNT);
+
+            for (let i = 0; i < PIXEL_COUNT; i++) {
+                const pixel = document.createElement('div');
+                pixel.classList.add('pixel');
+                pixel.style.width = `${pixelSize}px`;
+                pixel.style.height = `${pixelSize}px`;
+                pixel.style.borderRadius = `${pixelRadius}px`;
+                gridContainer.appendChild(pixel);
+                pixels.push(pixel);
+            }
+        }
+
+
+        function generateDiagonalColors() {
+            const diagonalColors = [];
+            for (let i = 0; i < DIAGONAL_COUNT; i++) {
+                const hue = Math.random() * 360;
+                const saturation = 70 + Math.random() * 30;
+                const lightness = 55 + Math.random() * 10;
+                diagonalColors.push({ h: hue, s: saturation, l: lightness });
+            }
+
+            pixels.forEach((pixel, i) => {
+                const x = i % GRID_WIDTH;
+                const y = Math.floor(i / GRID_WIDTH);
+                const diagonalIndex = x + y;
+                pixelBaseColors[i] = diagonalColors[diagonalIndex];
+            });
+            applyColors();
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = GRID_WIDTH;
+                    tempCanvas.height = GRID_HEIGHT;
+                    const tempCtx = tempCanvas.getContext('2d');
+
+                    const gridAspectRatio = GRID_WIDTH / GRID_HEIGHT;
+                    const imageAspectRatio = img.naturalWidth / img.naturalHeight;
+
+                    let sx = 0, sy = 0, sWidth = img.naturalWidth, sHeight = img.naturalHeight;
+
+                    if (imageAspectRatio > gridAspectRatio) {
+                        sWidth = img.naturalHeight * gridAspectRatio;
+                        sx = (img.naturalWidth - sWidth) / 2;
+                    } else if (imageAspectRatio < gridAspectRatio) {
+                        sHeight = img.naturalWidth / gridAspectRatio;
+                        sy = (img.naturalHeight - sHeight) / 2;
+                    }
+                    
+                    tempCtx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, GRID_WIDTH, GRID_HEIGHT);
+
+                    const imageData = tempCtx.getImageData(0, 0, GRID_WIDTH, GRID_HEIGHT).data;
+                    for (let i = 0; i < PIXEL_COUNT; i++) {
+                        const r = imageData[i * 4], g = imageData[i * 4 + 1], b = imageData[i * 4 + 2];
+                        pixelBaseColors[i] = rgbToHsl(r, g, b);
+                    }
+                    applyColors();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function applyColors() {
+             pixels.forEach((pixel, i) => {
+                const baseColor = pixelBaseColors[i];
+                if (!baseColor) return;
+                pixel.style.backgroundColor = `hsl(${baseColor.h}, ${baseColor.s}%, ${baseColor.l}%)`;
+            });
+        }
+
+        function rgbToHsl(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            if (max === min) { h = s = 0; } else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return { h: h * 360, s: s * 100, l: l * 100 };
+        }
+
+        function hslToRgb(h, s, l) {
+            s /= 100; l /= 100;
+            let c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2, r=0, g=0, b=0;
+            if (0<=h&&h<60) {r=c;g=x;b=0} else if(60<=h&&h<120){r=x;g=c;b=0} else if(120<=h&&h<180){r=0;g=c;b=x} else if(180<=h&&h<240){r=0;g=x;b=c} else if(240<=h&&h<300){r=x;g=0;b=c} else if(300<=h&&h<360){r=c;g=0;b=x}
+            return [Math.round((r+m)*255), Math.round((g+m)*255), Math.round((b+m)*255)];
+        }
+
+        function saveAsPng(includeBackground) {
+            const canvas = document.createElement('canvas');
+            const renderPixelSize = 10; 
+            const gapSize = Math.max(1, Math.floor(renderPixelSize * 0.2));
+            const totalWidth = (GRID_WIDTH * renderPixelSize) + ((GRID_WIDTH - 1) * gapSize) + (gapSize * 2);
+            const totalHeight = (GRID_HEIGHT * renderPixelSize) + ((GRID_HEIGHT - 1) * gapSize) + (gapSize * 2);
+            canvas.width = totalWidth; canvas.height = totalHeight;
+            const ctx = canvas.getContext('2d');
+
+            if (includeBackground) {
+                ctx.fillStyle = getComputedStyle(document.body).backgroundColor;
+                ctx.fillRect(0, 0, totalWidth, totalHeight);
+                ctx.fillStyle = getComputedStyle(gridContainer).backgroundColor;
+                const gridPadding = gapSize / 2;
+                ctx.fillRect(gridPadding, gridPadding, totalWidth - gridPadding * 2, totalHeight - gridPadding * 2);
+            }
+            
+            pixels.forEach((pixel, i) => {
+                const baseColor = pixelBaseColors[i];
+                if (!baseColor) return;
+                const x = i % GRID_WIDTH, y = Math.floor(i / GRID_WIDTH);
+                const [r, g, b] = hslToRgb(baseColor.h, baseColor.s, baseColor.l);
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                const drawX = gapSize + x * (renderPixelSize + gapSize);
+                const drawY = gapSize + y * (renderPixelSize + gapSize);
+                const borderRadius = renderPixelSize * 0.2;
+                ctx.beginPath();
+                ctx.moveTo(drawX + borderRadius, drawY);
+                ctx.lineTo(drawX + renderPixelSize - borderRadius, drawY);
+                ctx.quadraticCurveTo(drawX + renderPixelSize, drawY, drawX + renderPixelSize, drawY + borderRadius);
+                ctx.lineTo(drawX + renderPixelSize, drawY + renderPixelSize - borderRadius);
+                ctx.quadraticCurveTo(drawX + renderPixelSize, drawY + renderPixelSize, drawX + renderPixelSize - borderRadius, drawY + renderPixelSize);
+                ctx.lineTo(drawX + borderRadius, drawY + renderPixelSize);
+                ctx.quadraticCurveTo(drawX, drawY + renderPixelSize, drawX, drawY + renderPixelSize - borderRadius);
+                ctx.lineTo(drawX, drawY + borderRadius);
+                ctx.quadraticCurveTo(drawX, drawY, drawX + borderRadius, drawY);
+                ctx.closePath();
+                ctx.fill();
+            });
+
+            const link = document.createElement('a');
+            link.download = `pixel-art-${GRID_WIDTH}x${GRID_HEIGHT}-${includeBackground ? 'with-bg' : 'no-bg'}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // --- Event Listeners ---
+        randomizeBtn.addEventListener('click', generateDiagonalColors);
+        uploadBtn.addEventListener('click', () => imageUploader.click());
+        imageUploader.addEventListener('change', handleImageUpload);
+        
+        shapeControls.addEventListener('click', (e) => {
+            if (e.target.classList.contains('shape-btn')) {
+                shapeControls.querySelector('.active').classList.remove('active');
+                e.target.classList.add('active');
+                currentRatio = e.target.dataset.ratio;
+                setupGrid();
+            }
+        });
+        
+        densityControls.addEventListener('click', (e) => {
+            if (e.target.classList.contains('density-btn')) {
+                densityControls.querySelector('.active').classList.remove('active');
+                e.target.classList.add('active');
+                currentDensity = parseInt(e.target.dataset.density);
+                setupGrid();
+            }
+        });
+
+        savePngWithBgBtn.addEventListener('click', () => saveAsPng(true));
+        savePngNoBgBtn.addEventListener('click', () => saveAsPng(false));
+
+        // --- Initial Load ---
+        window.addEventListener('load', setupGrid);
+    </script>
+</body>
+</html>
